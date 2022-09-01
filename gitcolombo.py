@@ -15,7 +15,7 @@ LOG_FORMAT = r'%H;"%an %ae";"%cn %ce"'
 LOG_REGEXP = r'(\w+);"(.*?)";"(.*?)"'
 LOG_NAME_REGEXP = r'^(.*?)\s+(\S+)$'
 
-GIT_EXTRACT_CMD = "git log --pretty='{}' --all".format(LOG_FORMAT)
+GIT_EXTRACT_CMD = f"git log --pretty='{LOG_FORMAT}' --all"
 GIT_CLONE_CMD = "git clone {}"
 
 GITHUB_USER_REPOS = 'https://api.github.com/users/{}/repos'
@@ -68,10 +68,7 @@ class Commit:
 
 
     def __init__(self, log_str):
-        extracted = re.search(LOG_REGEXP, log_str)
-        if not extracted:
-            logging.error('Could not commit info from "%s"', log_str)
-        else:
+        if extracted := re.search(LOG_REGEXP, log_str):
             self.hash, self.author, self.committer = extracted.groups()
             self.author_name, self.author_email = Commit._extract_name_email(self.author)
             self.committer_name, self.committer_email = Commit._extract_name_email(self.committer)
@@ -80,6 +77,8 @@ class Commit:
             self.author_committer_emails_same = self.author_email == self.committer_email
 
             self.author_committer_same = self.author_committer_names_same and self.author_committer_emails_same
+        else:
+            logging.error('Could not commit info from "%s"', log_str)
 
 
     def __str__(self):
@@ -102,14 +101,12 @@ class Git:
     @staticmethod
     def get_tree_info(git_dir):
         process = subprocess.Popen(GIT_EXTRACT_CMD, cwd=git_dir, shell=True, stdout=subprocess.PIPE)
-        stat = process.stdout.read().decode()
-        return stat
+        return process.stdout.read().decode()
 
     @staticmethod
     def clone(link):
         process = subprocess.Popen(GIT_CLONE_CMD.format(link), shell=True, stdout=subprocess.PIPE)
-        res = process.stdout.read().decode()
-        return res
+        return process.stdout.read().decode()
 
     @staticmethod
     def get_verified_username(repo_url, commit, person):
@@ -151,11 +148,11 @@ class Person:
     def __str__(self):
         result = "Name:\t\t\t{name}\nEmail:\t\t\t{email}".format(name=self.name, email=self.email)
         if self.as_author:
-            result += "\nAppears as author:\t{} times".format(self.as_author)
+            result += f"\nAppears as author:\t{self.as_author} times"
         if self.as_committer:
-            result += "\nAppears as committer:\t{} times".format(self.as_committer)
+            result += f"\nAppears as committer:\t{self.as_committer} times"
         if self.github_link:
-            result += "\nVerified account:\n\t\t\thttps://github.com/{}".format(self.github_link)
+            result += f"\nVerified account:\n\t\t\thttps://github.com/{self.github_link}"
         if self.also_known:
             result += '\nAlso appears with:{}'.format(
                 '\n\t\t\t'.join(['']+list(self.also_known.keys()))
@@ -182,7 +179,7 @@ class GitAnalyst:
         if not source:
             return
 
-        if not '://' in source:
+        if '://' not in source:
             git_dir = source
         else:
             self.git.clone(source)
@@ -296,16 +293,13 @@ def main():
     # TODO: allow forks
 
     args = parser.parse_args()
-    log_level = logging.INFO if not args.debug else logging.DEBUG
+    log_level = logging.DEBUG if args.debug else logging.INFO
     logging.basicConfig(level=log_level, format='-'*40 + '\n%(levelname)s: %(message)s')
 
     analyst = None
 
     analyst = GitAnalyst()
-    repos = []
-
-    repos.append(args.url)
-    repos.append(args.dir and args.dir.rstrip('/'))
+    repos = [args.url, args.dir and args.dir.rstrip('/')]
 
     if args.recursive and args.dir:
         dirs = find_all_repos_recursively(args.dir)
